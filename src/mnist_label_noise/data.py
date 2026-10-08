@@ -46,7 +46,10 @@ def get_loaders(cfg: MLPLabelNoiseConfig):
     val_idx = perm[
         cfg.train_subset_size: cfg.train_subset_size + cfg.val_subset_size
     ].tolist()
-    train_subset = NoisyLabelSubset(train_full, idx, cfg.noise_frac, NUM_CLASSES, seed=cfg.seed)
+    train_subset = NoisyLabelSubset(
+        train_full, idx, cfg.noise_frac, NUM_CLASSES,
+        seed=cfg.seed if cfg.noise_seed is None else cfg.noise_seed,
+    )
 
     train_loader = DataLoader(train_subset, batch_size=cfg.batch_size, shuffle=True)
     train_eval_loader = DataLoader(train_subset, batch_size=1024, shuffle=False)

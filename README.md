@@ -93,36 +93,67 @@ Replace `257m` with `124m` or `500m` to select another paper scale. Results are 
 
 All robustness experiments use a fixed training horizon. The final epoch is the scientific checkpoint. Peak validation accuracy is diagnostic only, and test evaluation is performed once at the final horizon.
 
-### MLP and GRU on MNIST
+### arXiv configurations
 
-MNIST is downloaded automatically by `torchvision` to `--datasets-dir`.
-
-```bash
-PYTHONPATH=./src python -m paper_experiments.robustness \
-  --model mlp --method spectral --coefficient "$COEFFICIENT" \
-  --noise-frac 0.6 --datasets-dir data/mnist --device cuda:0
-
-PYTHONPATH=./src python -m paper_experiments.robustness \
-  --model gru --method l2 --coefficient "$COEFFICIENT" \
-  --noise-frac 0.4 --datasets-dir data/mnist --device cuda:0
-```
-
-The paper configurations use 3,000 training examples, a separate 5,000-example clean validation set, and 60 epochs. Use the same seed and corrupted-label split for matched `no_wd`, `l2`, and `spectral` comparisons.
-
-### BERT-base text classification
-
-Supported datasets are `ag_news`, `dbpedia_14`, `yahoo_answers_topics`, and `yelp_review_full`. Hugging Face Datasets downloads them automatically to its cache.
+Use `--preset arxiv` to reproduce the post-step robustness results. It fixes model and split seeds, coefficients, architecture, and training horizon. `--noise-seed` selects one of the five label-corruption seeds, 101 through 105 (default: 101). Initialization, data splits, and training order remain fixed across these replications. Conflicting overrides of frozen parameters are rejected.
 
 ```bash
 PYTHONPATH=./src python -m paper_experiments.robustness \
-  --model bert --dataset dbpedia_14 \
-  --method spectral --coefficient "$COEFFICIENT" --noise-frac 0.6 \
-  --datasets-dir data/bert --device cuda:0
+  --preset arxiv --model mlp --method spectral \
+  --noise-frac 0.6 --noise-seed 101 \
+  --datasets-dir data/mnist --device cuda:0 --dry-run
+
+PYTHONPATH=./src python -m paper_experiments.robustness \
+  --preset arxiv --model bert --dataset ag_news_confirmatory \
+  --method spectral --noise-frac 0.6 --noise-seed 101 \
+  --datasets-dir data/bert --device cuda:0 --dry-run
 ```
 
-BERT-base trains for 25 epochs. Embeddings and the bottom eight encoder blocks are frozen. Spectral WD and L2-SP regularize the displacement `W - W0` of the same two-dimensional weights in the top four encoder blocks and pooler. The classifier, biases, and normalization parameters are excluded.
+Remove `--dry-run` to train. Each replication gets a separate result directory. MNIST is downloaded by `torchvision`, and BERT datasets are downloaded by Hugging Face Datasets.
 
-Use `--method no_wd --coefficient "$COEFFICIENT"`, `--method l2 --coefficient C`, or `--method spectral --coefficient C`. Calibrate coefficients on the designated validation condition only, then reuse them across the remaining noise levels.
+MNIST uses model/split seed 0, 3,000 training examples, 5,000 clean validation examples, and 60 epochs. The MLP has four hidden layers of width 2,048. The row-sequential GRU has two layers of hidden dimension 1,280. Spectral and L2 decay act on the same matrices.
+
+BERT-base trains for 25 epochs. Embeddings and the bottom eight encoder blocks are frozen. Spectral WD and L2-SP regularize `W - W0` for the same matrices in the top four encoder blocks and pooler. The classifier, biases, and normalization parameters are excluded. Coefficients remain fixed across noise levels.
+
+The confirmatory AG News split excludes the pilot training and validation examples selected with split seed 1337. Its test set contains held-out examples from the official training partition. The default BERT dataset for `--preset arxiv` is `ag_news_confirmatory`. `--data-seed` is an alias for `--noise-seed` on BERT.
+
+Coefficients were calibrated using final clean-validation accuracy in separate tuning runs: independently at each noise level for MNIST, and at 60% noise for BERT. They were frozen before the five corruption-seed replications. The test results and clean validation were not used to select checkpoints.
+
+To run all 360 post-step conditions:
+
+```bash
+for seed in 101 102 103 104 105; do
+  for noise in 0.1 0.25 0.4 0.6; do
+    for method in no_wd l2 spectral; do
+      for model in mlp gru; do
+        PYTHONPATH=./src python -m paper_experiments.robustness \
+          --preset arxiv --model "$model" --method "$method" \
+          --noise-frac "$noise" --noise-seed "$seed" \
+          --datasets-dir data/mnist --device cuda:0
+      done
+      for dataset in ag_news_confirmatory dbpedia_14 yahoo_answers_topics yelp_review_full; do
+        PYTHONPATH=./src python -m paper_experiments.robustness \
+          --preset arxiv --model bert --dataset "$dataset" --method "$method" \
+          --noise-frac "$noise" --noise-seed "$seed" \
+          --datasets-dir data/bert --device cuda:0
+      done
+    done
+  done
+done
+```
+
+### Custom configurations
+
+Set `COEFFICIENT` to the desired regularization strength for the example below.
+
+Omit `--preset` to set coefficients and seeds manually. For MLP/GRU, `--seed` controls initialization, splits, and training order, while `--noise-seed` controls only corruption. Omitting `--noise-seed` preserves the original behavior, using `--seed` for corruption too. BERT retains its legacy defaults: model seed 0, split seed 1337, data seed 2000, and the official `ag_news` test set.
+
+```bash
+PYTHONPATH=./src python -m paper_experiments.robustness \
+  --model gru --method spectral --coefficient "$COEFFICIENT" \
+  --noise-frac 0.6 --seed 0 --noise-seed 102 \
+  --datasets-dir data/mnist --device cuda:0
+```
 
 ## Checkpoint compression
 

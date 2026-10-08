@@ -107,6 +107,8 @@ def train_one_run(cfg: GRULabelNoiseConfig):
         f"gru_h{cfg.hidden_dim}x{cfg.n_layers}_rowseq_nf{cfg.noise_frac}_"
         f"{regularizer_tag}_{coefficient}_seed{cfg.seed}"
     )
+    if cfg.run_name is None and cfg.noise_seed is not None:
+        run_name += f"_noise{cfg.noise_seed}"
     result_path = Path(cfg.results_base_folder) / run_name / "result.json"
     if result_path.exists():
         logger.info("skip completed %s", run_name)
@@ -208,7 +210,9 @@ def parse_args():
     defaults = dataclasses.asdict(GRULabelNoiseConfig())
     for field in dataclasses.fields(GRULabelNoiseConfig):
         default = defaults[field.name]
-        if field.type == bool:
+        if field.name == "noise_seed":
+            parser.add_argument("--noise_seed", type=int, default=default)
+        elif field.type == bool:
             parser.add_argument(f"--{field.name}", action="store_true", default=default)
         else:
             parser.add_argument(

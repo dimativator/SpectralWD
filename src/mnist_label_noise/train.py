@@ -89,6 +89,8 @@ def train_one_run(cfg: MLPLabelNoiseConfig) -> dict:
         f"mlp_h{cfg.hidden_dim}x{cfg.n_hidden_layers}_nf{cfg.noise_frac}_"
         f"{regularizer_tag}_{coefficient}_seed{cfg.seed}"
     )
+    if cfg.run_name is None and cfg.noise_seed is not None:
+        run_name += f"_noise{cfg.noise_seed}"
     result_path = Path(cfg.results_base_folder) / run_name / "result.json"
     if result_path.exists():
         logger.info("skip completed %s", run_name)
@@ -209,7 +211,9 @@ def parse_args() -> MLPLabelNoiseConfig:
     defaults = dataclasses.asdict(MLPLabelNoiseConfig())
     for field in dataclasses.fields(MLPLabelNoiseConfig):
         default = defaults[field.name]
-        if field.type == bool:
+        if field.name == "noise_seed":
+            p.add_argument("--noise_seed", type=int, default=default)
+        elif field.type == bool:
             p.add_argument(f"--{field.name}", action="store_true", default=default)
         else:
             p.add_argument(f"--{field.name}", type=type(default) if default is not None else str, default=default)

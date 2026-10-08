@@ -6,9 +6,16 @@ import json
 from pathlib import Path
 
 from .regularization import Regularization
+from .robustness_presets import CORRUPTION_SEEDS, arxiv_defaults
 
 
 BERT_DATASETS = {
+    "ag_news_confirmatory": {
+        "num_labels": 4,
+        "train_size": 5000,
+        "validation_size": 5000,
+        "test_size": 10000,
+    },
     "ag_news": {
         "num_labels": 4,
         "train_size": 5000,
@@ -37,7 +44,48 @@ BERT_DATASETS = {
 
 
 def build_config(args: argparse.Namespace):
-    regularization = Regularization(args.method, args.coefficient)
+    args = argparse.Namespace(**vars(args))
+    args.dataset = args.dataset or (
+        "ag_news_confirmatory" if args.preset == "arxiv" else "ag_news"
+    )
+    if args.preset == "arxiv":
+        for field, value in arxiv_defaults(
+            args.model, args.dataset, args.method, args.noise_frac
+        ).items():
+            supplied = getattr(args, field)
+            if supplied is not None and supplied != value:
+                raise ValueError(f"arxiv fixes {field}={value}; omit --preset to override")
+            setattr(args, field, value)
+        corruption_seed = args.noise_seed
+        if args.model == "bert" and args.data_seed is not None:
+            if corruption_seed is not None and corruption_seed != args.data_seed:
+                raise ValueError("noise-seed and data-seed must agree for BERT")
+            corruption_seed = args.data_seed
+        corruption_seed = 101 if corruption_seed is None else corruption_seed
+        if corruption_seed not in CORRUPTION_SEEDS:
+            raise ValueError(f"arxiv requires a corruption seed in {CORRUPTION_SEEDS}")
+        args.noise_seed = corruption_seed
+        if args.model == "bert":
+            args.data_seed = corruption_seed
+        task = args.dataset if args.model == "bert" else "mnist"
+        args.run_name = args.run_name or (
+            f"{args.model}_{task}_nf{args.noise_frac:g}_"
+            f"{args.method}_coef{args.coefficient:g}_noise{corruption_seed}"
+        )
+    args.seed = 0 if args.seed is None else args.seed
+    args.coefficient = 0.0 if args.coefficient is None else args.coefficient
+    args.split_seed = 1337 if args.split_seed is None else args.split_seed
+    args.exclude_split_seed = -1 if args.exclude_split_seed is None else args.exclude_split_seed
+    if args.model == "bert" and args.noise_seed is not None:
+        if args.data_seed is not None and args.data_seed != args.noise_seed:
+            raise ValueError("noise-seed and data-seed must agree for BERT")
+        args.data_seed = args.noise_seed
+    args.data_seed = 2000 if args.data_seed is None else args.data_seed
+    # MLP/10% retains the calibrated spectral control slot at coefficient zero.
+    regularization = Regularization(
+        "no_wd" if args.method == "spectral" and args.coefficient == 0 else args.method,
+        args.coefficient,
+    )
     common = {
         "seed": args.seed,
         "noise_frac": args.noise_frac,
@@ -51,6 +99,7 @@ def build_config(args: argparse.Namespace):
 
         return MLPLabelNoiseConfig(
             **common,
+            noise_seed=args.noise_seed,
             spectral_l1_reg_coef=regularization.spectral_coefficient,
             matrix_l2_reg_coef=regularization.l2_coefficient,
             hidden_dim=2048,
@@ -70,6 +119,7 @@ def build_config(args: argparse.Namespace):
 
         return GRULabelNoiseConfig(
             **common,
+            noise_seed=args.noise_seed,
             spectral_l1_reg_coef=regularization.spectral_coefficient,
             matrix_l2_reg_coef=regularization.l2_coefficient,
             hidden_dim=1280,
@@ -95,6 +145,7 @@ def build_config(args: argparse.Namespace):
         matrix_l2_delta_coef=regularization.l2_coefficient,
         split_seed=args.split_seed,
         data_seed=args.data_seed,
+        exclude_split_seed=args.exclude_split_seed,
         trainable_top_layers=4,
         regularize_classifier=False,
         batch_size=32,
@@ -112,12 +163,16 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=("mlp", "gru", "bert"))
     parser.add_argument("--method", required=True, choices=("no_wd", "l2", "spectral"))
-    parser.add_argument("--coefficient", type=float, default=0.0)
+    parser.add_argument("--preset", choices=("arxiv",), help="Use frozen arXiv settings")
+    parser.add_argument("--coefficient", type=float, default=None)
     parser.add_argument("--noise-frac", type=float, required=True)
-    parser.add_argument("--dataset", choices=tuple(BERT_DATASETS), default="ag_news")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--split-seed", type=int, default=1337)
-    parser.add_argument("--data-seed", type=int, default=2000)
+    parser.add_argument("--dataset", choices=tuple(BERT_DATASETS), default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--split-seed", type=int, default=None)
+    parser.add_argument("--exclude-split-seed", type=int, default=None)
+    parser.add_argument("--data-seed", type=int, default=None)
+    parser.add_argument("--noise-seed", type=int, default=None,
+                        help="Label-corruption seed only (BERT: alias for data-seed)")
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
         "--datasets-dir", type=Path, default=Path.home() / "paper_datasets"

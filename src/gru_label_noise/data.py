@@ -56,7 +56,8 @@ def get_loaders(cfg: GRULabelNoiseConfig):
         cfg.train_subset_size: cfg.train_subset_size + cfg.val_subset_size
     ].tolist()
     train_subset = NoisyMNISTSubset(
-        train_full, train_indices, cfg.noise_frac, seed=cfg.seed
+        train_full, train_indices, cfg.noise_frac,
+        seed=cfg.seed if cfg.noise_seed is None else cfg.noise_seed,
     )
 
     train_loader = DataLoader(

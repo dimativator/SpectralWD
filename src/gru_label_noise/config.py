@@ -6,6 +6,7 @@ from typing import Optional
 @dataclass(frozen=True)
 class GRULabelNoiseConfig:
     seed: int = 0
+    noise_seed: Optional[int] = None
     spectral_l1_reg_coef: float = 0.0
     matrix_l2_reg_coef: float = 0.0
     noise_frac: float = 0.6
