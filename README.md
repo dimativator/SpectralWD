@@ -55,6 +55,10 @@ The historical paper launcher uses the first five parquet shards by default. Kee
 
 ## LLaMA pretraining
 
+![Validation loss and mean effective rank during LLaMA pretraining](docs/figures/adam_spectral_wd_llama257m.png)
+
+Figure 1 from the paper: validation loss (left) and mean effective rank (right) during training of a 257M-parameter LLaMA on FineWeb-Edu with Adam and Spectral WD.
+
 The launcher provides the 124M, 257M, and 500M profiles used in the study. All profiles use seed 0, sequence length 1024, effective batch size 128, 2,000 warmup steps, and cosine decay.
 
 Audit a command first:
@@ -106,6 +110,10 @@ The robustness and LLaMA launchers accept `--wd-order pre|post`. Spectral WD def
 Direct `src/main.py` runs use `--spectral_wd_order` and `--l2_wd_order`, with the same defaults. `--spectral_l1_reg_coupled` remains a separate gradient-regularization mode. The published robustness L2 runs used post-step decay, so reproduce them with `--wd-order post`.
 
 ## Robustness experiments
+
+![Final clean-test accuracy under label noise on MNIST and BERT-base tasks](docs/figures/label_noise_robustness_with_pre_step.png)
+
+Final-checkpoint clean-test accuracy under label noise for MNIST (top) and BERT-base (bottom). Curves show means over five label-corruption seeds, with shaded bands showing ± one sample standard deviation. Model initialization, data splits, and regularization coefficients are fixed.
 
 All robustness experiments use a fixed training horizon. The final epoch is the scientific checkpoint. Peak validation accuracy is diagnostic only, and test evaluation is performed once at the final horizon.
 
