@@ -1,4 +1,14 @@
-# Spectral Weight Decay experiments
+# Spectral Weight Decay: Inducing Low-Rank Structure in Neural Network Weights
+
+Dmitrii Andriianov, Andrey Veprikov, Aleksandr Beznosikov
+
+Accepted to the NIPS OPT 2026 Workshop (poster).
+
+## Abstract
+
+> Standard weight decay treats each weight matrix as a vector and ignores its spectral structure. We introduce spectral weight decay, a post-step decoupled nuclear-norm update that applies additive rather than multiplicative spectral shrinkage. We connect the update to approximate proximal descent and show that its sensitivity to update order can exceed that of conventional $\ell_2$ weight decay near rank deficiency. Across LLaMA models with 124M to 500M parameters, spectral weight decay lowers effective rank and improves SVD-LLM compression at matched validation loss. At 500M and a 4% distortion budget, it reaches 1.89× compression and 1.18× GPU inference speedup, compared with 1.14× and 1.01× after standard weight decay. Under fixed-horizon training with 60% label noise, it also improves final mean clean-test accuracy over matched $\ell_2$ regularization by up to 17.8 points on MNIST and 4.6 points across four BERT-base tasks.
+
+## Code
 
 This directory is a standalone research-code snapshot for the paper experiments. It contains:
 
