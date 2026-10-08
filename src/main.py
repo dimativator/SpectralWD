@@ -32,6 +32,7 @@ from optim.scion import Scion, ScionLight, scion_partitions
 from optim.sign import Signum
 from optim.soap import SOAP
 from optim.sophia import SophiaG
+from optim.adamw import AdamWWithOrder
 from optim.adamw_spectral_L1_reg import AdamWSpectralL1Reg
 from optim.adamw_nuclear_prox import AdamWNuclearProx
 from optim.numuon import NuMuon
@@ -155,8 +156,9 @@ def main(args, parser):
         )
         print(f"using fused AdamW: {use_fused}")
         extra_args = dict(fused=True) if use_fused else dict()
-        opt = torch.optim.AdamW(
+        opt = AdamWWithOrder(
             group_specs,
+            l2_wd_order=args.l2_wd_order,
             lr=args.lr,
             betas=(args.beta1, args.beta2),
             weight_decay=args.weight_decay,
@@ -372,6 +374,8 @@ def main(args, parser):
             svt_interval=args.spectral_l1_svt_interval,
             svt_thresh=args.spectral_l1_svt_thresh,
             coupled=args.spectral_l1_reg_coupled,
+            spectral_wd_order=args.spectral_wd_order,
+            l2_wd_order=args.l2_wd_order,
         )
     elif args.opt == "adamw-nuclear-prox":
         opt = AdamWNuclearProx(

@@ -91,6 +91,9 @@ def train_one_run(cfg: MLPLabelNoiseConfig) -> dict:
     )
     if cfg.run_name is None and cfg.noise_seed is not None:
         run_name += f"_noise{cfg.noise_seed}"
+    if cfg.run_name is None:
+        order = cfg.l2_wd_order if family == "l2" else cfg.spectral_wd_order
+        run_name += f"_wd{order}"
     result_path = Path(cfg.results_base_folder) / run_name / "result.json"
     if result_path.exists():
         logger.info("skip completed %s", run_name)
@@ -112,6 +115,8 @@ def train_one_run(cfg: MLPLabelNoiseConfig) -> dict:
         betas=(cfg.beta1, cfg.beta2),
         spectral_l1_reg_coef=cfg.spectral_l1_reg_coef,
         matrix_l2_reg_coef=cfg.matrix_l2_reg_coef,
+        spectral_wd_order=cfg.spectral_wd_order,
+        l2_wd_order=cfg.l2_wd_order,
         svt_interval=0,
     )
 

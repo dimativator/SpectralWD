@@ -39,9 +39,10 @@ def build_command(args: argparse.Namespace) -> list[str]:
         if args.method == "spectral"
         else regularization.l2_coefficient
     )
+    order = args.wd_order or ("pre" if args.method == "l2" else "post")
     run_name = args.run_name or (
         f"llama{args.size}_{args.method}_coef{args.coefficient:g}_"
-        f"lr{profile.learning_rate:g}_finewebedu"
+        f"lr{profile.learning_rate:g}_finewebedu_wd{order}"
     )
     command = [
         args.python,
@@ -60,6 +61,10 @@ def build_command(args: argparse.Namespace) -> list[str]:
         str(args.tokenized_data_dir),
         "--opt",
         optimizer,
+        "--spectral_wd_order",
+        order if args.method == "spectral" else "post",
+        "--l2_wd_order",
+        order if args.method == "l2" else "pre",
         "--lr",
         str(profile.learning_rate),
         "--iterations",
@@ -129,6 +134,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", required=True, choices=tuple(PROFILES))
     parser.add_argument("--method", required=True, choices=("no_wd", "l2", "spectral"))
+    parser.add_argument("--wd-order", choices=("pre", "post"), default=None,
+                        help="Decay order (default: spectral=post, l2=pre)")
     parser.add_argument("--coefficient", type=float, default=0.0)
     parser.add_argument("--spectral-nonmatrix-weight-decay", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=0)

@@ -192,6 +192,8 @@ def build_optimizer(model, cfg: BertDeltaLabelNoiseConfig):
         betas=(cfg.beta1, cfg.beta2),
         spectral_l1_reg_coef=0.0,
         matrix_l2_reg_coef=0.0,
+        spectral_wd_order=cfg.spectral_wd_order,
+        l2_wd_order=cfg.l2_wd_order,
         weight_decay=0.0,
         regularize_from_init=False,
     )
@@ -220,6 +222,9 @@ def train_one_run(cfg: BertDeltaLabelNoiseConfig) -> dict:
     run_name = cfg.run_name or (
         f"bert_{cfg.dataset}_nf{cfg.noise_frac}_{family}_{coefficient}_s{cfg.seed}"
     )
+    if cfg.run_name is None:
+        order = cfg.l2_wd_order if family == "l2-sp" else cfg.spectral_wd_order
+        run_name += f"_wd{order}"
     result_path = Path(cfg.results_base_folder) / run_name / "result.json"
     if result_path.exists():
         logger.info("skip completed %s", run_name)

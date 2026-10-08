@@ -89,13 +89,19 @@ Replace `257m` with `124m` or `500m` to select another paper scale. Results are 
 
 `no_wd` disables AdamW weight decay, and `l2` uses the requested L2 coefficient. `spectral` uses `AdamWSpectralL1Reg` on matrix weights. Non-matrix parameters retain the L2 decay configured by `--spectral-nonmatrix-weight-decay`.
 
+## Weight-decay order
+
+The robustness and LLaMA launchers accept `--wd-order pre|post`. Spectral WD defaults to `post`, and L2 WD defaults to `pre`. Pre-step decay uses the weights before the Adam update, while post-step decay uses the updated weights. Both are decoupled from Adam moments. For BERT, the same rule applies to `W - W0`. For example, append `--wd-order pre` to a spectral run or `--wd-order post` to an L2 run. Generated run names include the order.
+
+Direct `src/main.py` runs use `--spectral_wd_order` and `--l2_wd_order`, with the same defaults. `--spectral_l1_reg_coupled` remains a separate gradient-regularization mode. The published robustness L2 runs used post-step decay, so reproduce them with `--wd-order post`.
+
 ## Robustness experiments
 
 All robustness experiments use a fixed training horizon. The final epoch is the scientific checkpoint. Peak validation accuracy is diagnostic only, and test evaluation is performed once at the final horizon.
 
 ### arXiv configurations
 
-Use `--preset arxiv` to reproduce the post-step robustness results. It fixes model and split seeds, coefficients, architecture, and training horizon. `--noise-seed` selects one of the five label-corruption seeds, 101 through 105 (default: 101). Initialization, data splits, and training order remain fixed across these replications. Conflicting overrides of frozen parameters are rejected.
+Use `--preset arxiv` for the robustness coefficients and seeds used in the paper. It fixes model and split seeds, coefficients, architecture, and training horizon. `--noise-seed` selects one of the five label-corruption seeds, 101 through 105 (default: 101). Initialization, data splits, and training order remain fixed across these replications. Conflicting overrides of frozen parameters are rejected.
 
 ```bash
 PYTHONPATH=./src python -m paper_experiments.robustness \
@@ -128,13 +134,13 @@ for seed in 101 102 103 104 105; do
       for model in mlp gru; do
         PYTHONPATH=./src python -m paper_experiments.robustness \
           --preset arxiv --model "$model" --method "$method" \
-          --noise-frac "$noise" --noise-seed "$seed" \
+          --noise-frac "$noise" --noise-seed "$seed" --wd-order post \
           --datasets-dir data/mnist --device cuda:0
       done
       for dataset in ag_news_confirmatory dbpedia_14 yahoo_answers_topics yelp_review_full; do
         PYTHONPATH=./src python -m paper_experiments.robustness \
           --preset arxiv --model bert --dataset "$dataset" --method "$method" \
-          --noise-frac "$noise" --noise-seed "$seed" \
+          --noise-frac "$noise" --noise-seed "$seed" --wd-order post \
           --datasets-dir data/bert --device cuda:0
       done
     done

@@ -44,6 +44,7 @@ BERT_DATASETS = {
 
 
 def build_config(args: argparse.Namespace):
+    generated_run_name = args.run_name is None
     args = argparse.Namespace(**vars(args))
     args.dataset = args.dataset or (
         "ag_news_confirmatory" if args.preset == "arxiv" else "ag_news"
@@ -86,7 +87,12 @@ def build_config(args: argparse.Namespace):
         "no_wd" if args.method == "spectral" and args.coefficient == 0 else args.method,
         args.coefficient,
     )
+    order = args.wd_order or ("pre" if args.method == "l2" else "post")
+    if generated_run_name and args.preset == "arxiv":
+        args.run_name += f"_wd{order}"
     common = {
+        "spectral_wd_order": order if args.method == "spectral" else "post",
+        "l2_wd_order": order if args.method == "l2" else "pre",
         "seed": args.seed,
         "noise_frac": args.noise_frac,
         "device": args.device,
@@ -163,6 +169,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=("mlp", "gru", "bert"))
     parser.add_argument("--method", required=True, choices=("no_wd", "l2", "spectral"))
+    parser.add_argument("--wd-order", choices=("pre", "post"), default=None,
+                        help="Decay order (default: spectral=post, l2=pre)")
     parser.add_argument("--preset", choices=("arxiv",), help="Use frozen arXiv settings")
     parser.add_argument("--coefficient", type=float, default=None)
     parser.add_argument("--noise-frac", type=float, required=True)

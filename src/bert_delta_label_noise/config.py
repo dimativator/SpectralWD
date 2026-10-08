@@ -11,6 +11,8 @@ class BertDeltaLabelNoiseConfig:
     noise_frac: float = 0.6
     spectral_delta_coef: float = 0.0
     matrix_l2_delta_coef: float = 0.0
+    spectral_wd_order: str = "post"
+    l2_wd_order: str = "pre"
 
     dataset: str = "ag_news"
     model_name: str = "google-bert/bert-base-uncased"

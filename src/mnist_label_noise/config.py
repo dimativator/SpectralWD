@@ -9,6 +9,8 @@ class MLPLabelNoiseConfig:
     noise_seed: Optional[int] = None
     spectral_l1_reg_coef: float = 0.0
     matrix_l2_reg_coef: float = 0.0
+    spectral_wd_order: str = "post"
+    l2_wd_order: str = "pre"
     noise_frac: float = 0.25
 
     hidden_dim: int = 2048

@@ -134,6 +134,8 @@ def parse_args(base_parser, args, namespace):
     )
     parser.add_argument("--batch_size", default=50, type=int)
     parser.add_argument("--acc_steps", default=1, type=int)
+    parser.add_argument("--spectral_wd_order", choices=("pre", "post"), default="post")
+    parser.add_argument("--l2_wd_order", choices=("pre", "post"), default="pre")
     parser.add_argument("--weight_decay", default=1e-1, type=float)
     parser.add_argument("--beta1", default=0.9, type=float)
     parser.add_argument("--beta2", default=0.95, type=float)

@@ -57,9 +57,10 @@ def _singular_value_threshold(W, tau):
 class AdamWSpectralL1Reg(torch.optim.Optimizer):
     """AdamW with decoupled or coupled spectral L1 regularization.
 
-    By default the nuclear-norm prox is applied to the *gradient-stepped*
-    weights Z = W - lr*adam_update, matching proximal gradient descent
-    W_{k+1} = prox(W_k - lr*grad). Set ``coupled=True`` to instead add the
+    Spectral WD defaults to ``spectral_wd_order="post"`` and L2 WD to
+    ``l2_wd_order="pre"``. Pre-step decay uses the old weights, while
+    post-step decay uses Z = W - lr*adam_update. Both leave Adam moments
+    unchanged by the decoupled regularizer. Set ``coupled=True`` to instead add the
     nuclear-norm subgradient to the task gradient before Adam updates its
     moments. This leaves the model's reported task loss unchanged while making
     the regularizer part of the adaptive Adam update.
@@ -84,6 +85,8 @@ class AdamWSpectralL1Reg(torch.optim.Optimizer):
         svt_thresh=None,
         coupled=False,
         regularize_from_init=False,
+        spectral_wd_order="post",
+        l2_wd_order="pre",
     ):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -121,12 +124,85 @@ class AdamWSpectralL1Reg(torch.optim.Optimizer):
             svt_thresh=svt_thresh,
             coupled=coupled,
             regularize_from_init=regularize_from_init,
+            spectral_wd_order=spectral_wd_order,
+            l2_wd_order=l2_wd_order,
         )
 
         super(AdamWSpectralL1Reg, self).__init__(params, defaults)
+        for group in self.param_groups:
+            for key in ("spectral_wd_order", "l2_wd_order"):
+                if group[key] not in ("pre", "post"):
+                    raise ValueError(f"{key} must be pre or post")
+            if group["coupled"] and group["spectral_wd_order"] == "pre":
+                raise ValueError("coupled spectral regularization cannot use pre-step WD")
 
     def __setstate__(self, state):
         super(AdamWSpectralL1Reg, self).__setstate__(state)
+
+    def _apply_decoupled_decay(
+        self, p: torch.Tensor, state: dict, group: dict, stage: str
+    ) -> None:
+        lr = group["lr"]
+        wd = group["weight_decay"]
+        spectral_l1_reg_coef = group["spectral_l1_reg_coef"]
+        matrix_l2_reg_coef = group["matrix_l2_reg_coef"]
+        svt_interval = group["svt_interval"]
+        svt_thresh = group["svt_thresh"]
+        coupled = group["coupled"]
+        regularize_from_init = group["regularize_from_init"]
+        orig_shape = p.data.shape
+        is_conv = len(orig_shape) == 4
+        if (
+            not coupled
+            and group.get("spectral_wd_order", "post") == stage
+            and (len(orig_shape) == 2 or is_conv)
+            and spectral_l1_reg_coef > 0
+        ):
+            regularized_value = (
+                p.data - state["reference"] if regularize_from_init else p.data
+            )
+            W = (
+                regularized_value.view(orig_shape[0], -1)
+                if is_conv
+                else regularized_value
+            )
+            do_svt = (
+                svt_interval > 0 and state["step"] % svt_interval == 0
+            )
+            if do_svt:
+                # Exact prox: singular-value soft-thresholding (zeros the tail).
+                tau = (
+                    svt_thresh
+                    if svt_thresh is not None
+                    else lr * spectral_l1_reg_coef
+                )
+                new_W = _singular_value_threshold(W, tau)
+                new_value = new_W.view(orig_shape) if is_conv else new_W
+                if regularize_from_init:
+                    p.data.copy_(state["reference"] + new_value)
+                else:
+                    p.data.copy_(new_value)
+            else:
+                l1_weight_reg = zeropower_via_newtonschulz5(W, 5)
+                p.data.add_(
+                    l1_weight_reg.view(orig_shape) if is_conv else l1_weight_reg,
+                    alpha=-(lr * spectral_l1_reg_coef),
+                )
+        elif (
+            (len(orig_shape) == 2 or is_conv)
+            and matrix_l2_reg_coef > 0
+            and group.get("l2_wd_order", "post") == stage
+        ):
+            if regularize_from_init:
+                reference = state["reference"]
+                p.data.copy_(
+                    reference
+                    + (p.data - reference) * (1 - lr * matrix_l2_reg_coef)
+                )
+            else:
+                p.data.mul_(1 - lr * matrix_l2_reg_coef)
+        elif len(orig_shape) not in (2, 4) and group.get("l2_wd_order", "post") == stage:
+            p.data.mul_(1 - lr * wd)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -137,13 +213,9 @@ class AdamWSpectralL1Reg(torch.optim.Optimizer):
 
         for group in self.param_groups:
             lr = group["lr"]
-            wd = group["weight_decay"]
             eps = group["eps"]
             beta1, beta2 = group["betas"]
             spectral_l1_reg_coef = group["spectral_l1_reg_coef"]
-            matrix_l2_reg_coef = group["matrix_l2_reg_coef"]
-            svt_interval = group["svt_interval"]
-            svt_thresh = group["svt_thresh"]
             coupled = group["coupled"]
             regularize_from_init = group["regularize_from_init"]
 
@@ -212,58 +284,9 @@ class AdamWSpectralL1Reg(torch.optim.Optimizer):
 
                 denom = (v.sqrt() / math.sqrt(bias_correction2)).add_(eps)
 
+                self._apply_decoupled_decay(p, state, group, "pre")
                 p.data.addcdiv_(m, denom, value=-(lr / bias_correction1))
 
-                # --- Nuclear-norm prox applied to the stepped weights Z ---
-                # (faithful to W_{k+1} = prox(W_k - lr*grad)). Conv2d weights
-                # [out_ch, in_ch, kh, kw] are viewed as the standard "filter
-                # matrix" [out_ch, in_ch*kh*kw] so the same 2D nuclear-norm
-                # prox applies to them too, unmodified otherwise.
-                if (
-                    not coupled
-                    and (len(orig_shape) == 2 or is_conv)
-                    and spectral_l1_reg_coef > 0
-                ):
-                    regularized_value = (
-                        p.data - state["reference"] if regularize_from_init else p.data
-                    )
-                    W = (
-                        regularized_value.view(orig_shape[0], -1)
-                        if is_conv
-                        else regularized_value
-                    )
-                    do_svt = (
-                        svt_interval > 0 and state["step"] % svt_interval == 0
-                    )
-                    if do_svt:
-                        # Exact prox: singular-value soft-thresholding (zeros the tail).
-                        tau = (
-                            svt_thresh
-                            if svt_thresh is not None
-                            else lr * spectral_l1_reg_coef
-                        )
-                        new_W = _singular_value_threshold(W, tau)
-                        new_value = new_W.view(orig_shape) if is_conv else new_W
-                        if regularize_from_init:
-                            p.data.copy_(state["reference"] + new_value)
-                        else:
-                            p.data.copy_(new_value)
-                    else:
-                        l1_weight_reg = zeropower_via_newtonschulz5(W, 5)
-                        p.data.add_(
-                            l1_weight_reg.view(orig_shape) if is_conv else l1_weight_reg,
-                            alpha=-(lr * spectral_l1_reg_coef),
-                        )
-                elif (len(orig_shape) == 2 or is_conv) and matrix_l2_reg_coef > 0:
-                    if regularize_from_init:
-                        reference = state["reference"]
-                        p.data.copy_(
-                            reference
-                            + (p.data - reference) * (1 - lr * matrix_l2_reg_coef)
-                        )
-                    else:
-                        p.data.mul_(1 - lr * matrix_l2_reg_coef)
-                elif len(orig_shape) not in (2, 4):
-                    p.data.mul_(1 - lr * wd)
+                self._apply_decoupled_decay(p, state, group, "post")
 
         return loss
