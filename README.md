@@ -1,5 +1,7 @@
 # Spectral Weight Decay: Inducing Low-Rank Structure in Neural Network Weights
 
+[![arXiv](https://img.shields.io/badge/arXiv-2610.11730-b31b1b.svg)](https://arxiv.org/abs/2610.11730) [![BibTeX](https://img.shields.io/badge/BibTeX-Citation-green.svg)](#citation)
+
 Dmitrii Andriianov, Andrey Veprikov, Aleksandr Beznosikov
 
 Accepted to the NIPS OPT 2026 Workshop (poster).
@@ -201,3 +203,17 @@ Repeat `--checkpoint PATH` to benchmark several dense checkpoints. Restrict the 
 All methods target the same attention and MLP projections: `c_attn`, `c_proj`, `w1`, and `w2`. Embeddings and the output head remain dense. ASVD uses activation-aware scaling, SliceGPT performs calibrated residual-stream PCA and structural slicing, SVD-LLM uses whitening-aware factorization, and Dobi-SVD uses differentiable rank allocation with the non-remapped IPCA update. Validation and calibration readers are reset for every method so all rows use identical data. Add `--no-downstream` for a faster validation-loss-only run.
 
 `rank=auto` is method-specific and does not impose an equal compression budget. Always report the measured parameter compression ratio when comparing methods.
+
+## Citation
+
+```bibtex
+@misc{andriianov2026spectralweightdecayinducing,
+  title={Spectral Weight Decay: Inducing Low-Rank Structure in Neural Network Weights},
+  author={Dmitrii Andriianov and Andrey Veprikov and Aleksandr Beznosikov},
+  year={2026},
+  eprint={2610.11730},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2610.11730},
+}
+```
